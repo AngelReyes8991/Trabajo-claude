@@ -1,0 +1,447 @@
+===============================================================================
+PROCESO DE APRENDIZAJE II
+PROGRAMACION AVANZADA DE BASE DE DATOS - 2026-20
+===============================================================================
+APELLIDOS Y NOMBRES DEL ESTUDIANTE : ____________________________________
+CORREO ELECTRONICO                 : ____________________________________
+BASE DE DATOS                      : CLASE_S05_STREAMING
+MOTOR                              : Microsoft SQL Server (T-SQL)
+===============================================================================
+
+-------------------------------------------------------------------------------
+NOTA SOBRE EL ESQUEMA UTILIZADO
+-------------------------------------------------------------------------------
+Las sentencias se escribieron sobre la estructura de la base de datos
+CLASE_S05_STREAMING trabajada en clase:
+
+  Usuarios       (UsuarioID, Nombre, Email, Pais, FechaRegistro, Estado)
+  Planes         (PlanID, NombrePlan, Precio, Pantallas)
+  Suscripciones  (SuscripcionID, UsuarioID, PlanID, FechaInicio, Estado)
+  Contenidos     (ContenidoID, Titulo, Tipo, Categoria, Anio)
+  Reproducciones (ReproduccionID, UsuarioID, ContenidoID, MinutosVistos, Fecha)
+
+Los valores de texto empleados en los filtros son:
+
+  Usuarios.Estado      = 'Activo'
+  Suscripciones.Estado = 'Activa'
+  Usuarios.Pais        = 'Perú'
+  Contenidos.Tipo      = 'Serie' / 'Película'
+  Contenidos.Categoria = 'Acción'
+
+Como la configuracion por omision de SQL Server distingue acentos, los
+literales se escribieron tal como aparecen en el enunciado. Si en la base de
+datos de clase se almacenan de otra forma, basta con ajustarlos en el WHERE
+correspondiente.
+
+USE CLASE_S05_STREAMING;
+GO
+
+===============================================================================
+PREGUNTA 1 (2 puntos)
+Registrar al usuario Ricardo Salinas e insertar su suscripcion al plan Premium
+usando subconsultas, y mostrar el resultado con INNER JOIN.
+===============================================================================
+
+-- 1.1) Registro del nuevo usuario
+INSERT INTO Usuarios (Nombre, Email, Pais, FechaRegistro, Estado)
+VALUES ('Ricardo Salinas', 'ricardo.salinas@email.com', 'Chile', GETDATE(), 'Activo');
+GO
+
+-- 1.2) Suscripcion activa al plan Premium.
+--      El UsuarioID y el PlanID se obtienen automaticamente con subconsultas.
+INSERT INTO Suscripciones (UsuarioID, PlanID, FechaInicio, Estado)
+VALUES
+(
+    (SELECT UsuarioID FROM Usuarios WHERE Email = 'ricardo.salinas@email.com'),
+    (SELECT PlanID    FROM Planes   WHERE NombrePlan = 'Premium'),
+    GETDATE(),
+    'Activa'
+);
+GO
+
+-- 1.3) Verificacion con INNER JOIN
+SELECT  U.Nombre          AS Usuario,
+        U.Email           AS Correo,
+        P.NombrePlan      AS PlanContratado,
+        S.FechaInicio     AS FechaInicio
+FROM         Usuarios      U
+INNER JOIN   Suscripciones S ON S.UsuarioID = U.UsuarioID
+INNER JOIN   Planes        P ON P.PlanID    = S.PlanID
+WHERE U.Email = 'ricardo.salinas@email.com';
+GO
+
+===============================================================================
+PREGUNTA 2 (2 puntos)
+Actualizar los precios de Planes con una sola sentencia UPDATE con CASE.
+===============================================================================
+
+-- 2.1) Precios antes de la actualizacion
+SELECT PlanID, NombrePlan, Pantallas, Precio AS PrecioAnterior
+FROM Planes
+ORDER BY Precio DESC;
+GO
+
+-- 2.2) Unica sentencia UPDATE con CASE
+UPDATE Planes
+SET Precio = CASE
+                WHEN Pantallas = 1            THEN Precio * 1.05   -- +5%
+                WHEN Pantallas BETWEEN 2 AND 3 THEN Precio * 1.10   -- +10%
+                WHEN Pantallas >= 4           THEN Precio * 1.15   -- +15%
+                ELSE Precio
+             END;
+GO
+
+-- 2.3) Planes con sus precios actualizados, de mayor a menor precio
+SELECT  PlanID,
+        NombrePlan,
+        Pantallas,
+        CAST(Precio AS DECIMAL(10,2)) AS PrecioActualizado
+FROM Planes
+ORDER BY Precio DESC;
+GO
+
+===============================================================================
+PREGUNTA 3 (2 puntos)
+Eliminar de Reproducciones los registros de usuarios de Peru, sobre contenidos
+de tipo Serie y con menos de 50 minutos vistos, usando DELETE con subconsultas.
+===============================================================================
+
+-- 3.1) Registros que seran afectados (ANTES de eliminar)
+SELECT  R.ReproduccionID,
+        R.UsuarioID,
+        R.ContenidoID,
+        R.MinutosVistos
+FROM Reproducciones R
+WHERE R.UsuarioID   IN (SELECT UsuarioID   FROM Usuarios   WHERE Pais = 'Perú')
+  AND R.ContenidoID IN (SELECT ContenidoID FROM Contenidos WHERE Tipo = 'Serie')
+  AND R.MinutosVistos < 50;
+GO
+
+-- 3.2) Eliminacion con DELETE y subconsultas
+DELETE FROM Reproducciones
+WHERE UsuarioID   IN (SELECT UsuarioID   FROM Usuarios   WHERE Pais = 'Perú')
+  AND ContenidoID IN (SELECT ContenidoID FROM Contenidos WHERE Tipo = 'Serie')
+  AND MinutosVistos < 50;
+
+PRINT 'Registros eliminados: ' + CAST(@@ROWCOUNT AS VARCHAR(10));
+GO
+
+-- 3.3) Verificacion posterior: la consulta debe devolver 0 filas
+SELECT  R.ReproduccionID,
+        R.UsuarioID,
+        R.ContenidoID,
+        R.MinutosVistos
+FROM Reproducciones R
+WHERE R.UsuarioID   IN (SELECT UsuarioID   FROM Usuarios   WHERE Pais = 'Perú')
+  AND R.ContenidoID IN (SELECT ContenidoID FROM Contenidos WHERE Tipo = 'Serie')
+  AND R.MinutosVistos < 50;
+GO
+
+===============================================================================
+PREGUNTA 4 (2 puntos)
+Crear la tabla ReporteConsumoUsuarios mediante SELECT INTO, solo con usuarios
+activos, usando INNER JOIN, COUNT, SUM, AVG y GROUP BY.
+===============================================================================
+
+-- 4.1) Si la tabla ya existe se elimina, porque SELECT INTO la crea
+IF OBJECT_ID('ReporteConsumoUsuarios', 'U') IS NOT NULL
+    DROP TABLE ReporteConsumoUsuarios;
+GO
+
+-- 4.2) Creacion de la tabla con SELECT INTO
+SELECT  U.UsuarioID,
+        U.Nombre,
+        U.Pais,
+        COUNT(R.ReproduccionID) AS CantidadReproducciones,
+        SUM(R.MinutosVistos)    AS TotalMinutosVistos,
+        CAST(AVG(CAST(R.MinutosVistos AS DECIMAL(10,2))) AS DECIMAL(10,2))
+                                AS PromedioMinutosPorReproduccion
+INTO ReporteConsumoUsuarios
+FROM         Usuarios       U
+INNER JOIN   Reproducciones R ON R.UsuarioID = U.UsuarioID
+WHERE U.Estado = 'Activo'
+GROUP BY U.UsuarioID, U.Nombre, U.Pais;
+GO
+
+-- 4.3) Contenido de la tabla creada
+SELECT  UsuarioID,
+        Nombre,
+        Pais,
+        CantidadReproducciones,
+        TotalMinutosVistos,
+        PromedioMinutosPorReproduccion
+FROM ReporteConsumoUsuarios
+ORDER BY TotalMinutosVistos DESC;
+GO
+
+===============================================================================
+PREGUNTA 5 (2 puntos)
+Dos transacciones sobre la tabla Planes: la primera con ROLLBACK y la segunda
+con COMMIT, mostrando los precios antes y despues de cada operacion.
+===============================================================================
+
+-------------------------------- TRANSACCION 1 --------------------------------
+-- Incremento del 20% a los planes con 2 o mas pantallas y ROLLBACK
+
+-- 5.1) Precios ANTES de la transaccion 1
+SELECT 'ANTES DE LA TRANSACCION 1' AS Momento,
+       PlanID, NombrePlan, Pantallas, CAST(Precio AS DECIMAL(10,2)) AS Precio
+FROM Planes
+ORDER BY PlanID;
+GO
+
+BEGIN TRANSACTION;
+
+    UPDATE Planes
+    SET Precio = Precio * 1.20
+    WHERE Pantallas >= 2;
+
+    -- 5.2) Precios DENTRO de la transaccion (cambios aun no confirmados)
+    SELECT 'DENTRO DE LA TRANSACCION 1' AS Momento,
+           PlanID, NombrePlan, Pantallas, CAST(Precio AS DECIMAL(10,2)) AS Precio
+    FROM Planes
+    ORDER BY PlanID;
+
+ROLLBACK TRANSACTION;
+GO
+
+-- 5.3) Precios DESPUES del ROLLBACK: deben ser iguales a los del paso 5.1
+SELECT 'DESPUES DEL ROLLBACK' AS Momento,
+       PlanID, NombrePlan, Pantallas, CAST(Precio AS DECIMAL(10,2)) AS Precio
+FROM Planes
+ORDER BY PlanID;
+GO
+
+-------------------------------- TRANSACCION 2 --------------------------------
+-- Incremento de 5 unidades monetarias al plan Premium y COMMIT
+
+-- 5.4) Precio ANTES de la transaccion 2
+SELECT 'ANTES DE LA TRANSACCION 2' AS Momento,
+       PlanID, NombrePlan, Pantallas, CAST(Precio AS DECIMAL(10,2)) AS Precio
+FROM Planes
+WHERE NombrePlan = 'Premium';
+GO
+
+BEGIN TRANSACTION;
+
+    UPDATE Planes
+    SET Precio = Precio + 5
+    WHERE NombrePlan = 'Premium';
+
+COMMIT TRANSACTION;
+GO
+
+-- 5.5) Precio DESPUES del COMMIT: el cambio queda confirmado
+SELECT 'DESPUES DEL COMMIT' AS Momento,
+       PlanID, NombrePlan, Pantallas, CAST(Precio AS DECIMAL(10,2)) AS Precio
+FROM Planes
+WHERE NombrePlan = 'Premium';
+GO
+
+===============================================================================
+PREGUNTA 6 (2 puntos)
+Vista vw_SuscripcionesPremiumActivas con CREATE OR ALTER VIEW.
+===============================================================================
+
+CREATE OR ALTER VIEW vw_SuscripcionesPremiumActivas
+AS
+    SELECT  U.UsuarioID,
+            U.Nombre,
+            U.Email,
+            U.Pais,
+            P.NombrePlan,
+            P.Precio,
+            S.FechaInicio
+    FROM         Usuarios      U
+    INNER JOIN   Suscripciones S ON S.UsuarioID = U.UsuarioID
+    INNER JOIN   Planes        P ON P.PlanID    = S.PlanID
+    WHERE S.Estado     = 'Activa'
+      AND P.NombrePlan = 'Premium';
+GO
+
+-- 6.1) Consulta de la vista ordenada por nombre del usuario
+SELECT  UsuarioID,
+        Nombre,
+        Email,
+        Pais,
+        NombrePlan,
+        CAST(Precio AS DECIMAL(10,2)) AS Precio,
+        FechaInicio
+FROM vw_SuscripcionesPremiumActivas
+ORDER BY Nombre;
+GO
+
+===============================================================================
+PREGUNTA 7 (2 puntos)
+Vista vw_EstadisticasUsuarios con LEFT JOIN e ISNULL, incluyendo a los usuarios
+sin reproducciones con valores en cero.
+===============================================================================
+
+CREATE OR ALTER VIEW vw_EstadisticasUsuarios
+AS
+    SELECT  U.UsuarioID,
+            U.Nombre,
+            U.Pais,
+            U.Estado,
+            COUNT(R.ReproduccionID)         AS CantidadReproducciones,
+            ISNULL(SUM(R.MinutosVistos), 0) AS TotalMinutosVistos,
+            ISNULL(CAST(AVG(CAST(R.MinutosVistos AS DECIMAL(10,2))) AS DECIMAL(10,2)), 0)
+                                            AS PromedioMinutosPorReproduccion
+    FROM        Usuarios       U
+    LEFT JOIN   Reproducciones R ON R.UsuarioID = U.UsuarioID
+    GROUP BY U.UsuarioID, U.Nombre, U.Pais, U.Estado;
+GO
+
+-- 7.1) Solo usuarios con mas de 100 minutos vistos, de mayor a menor
+SELECT  UsuarioID,
+        Nombre,
+        Pais,
+        Estado,
+        CantidadReproducciones,
+        TotalMinutosVistos,
+        PromedioMinutosPorReproduccion
+FROM vw_EstadisticasUsuarios
+WHERE TotalMinutosVistos > 100
+ORDER BY TotalMinutosVistos DESC;
+GO
+
+===============================================================================
+PREGUNTA 8 (2 puntos)
+Vista vw_ContenidosSuperioresPromedio: contenidos cuyo total de minutos vistos
+supera el promedio de minutos acumulados por contenido con reproducciones.
+===============================================================================
+
+CREATE OR ALTER VIEW vw_ContenidosSuperioresPromedio
+AS
+    SELECT  C.ContenidoID,
+            C.Titulo,
+            C.Tipo,
+            C.Categoria,
+            COUNT(R.ReproduccionID) AS CantidadReproducciones,
+            SUM(R.MinutosVistos)    AS TotalMinutosVistos
+    FROM         Contenidos     C
+    INNER JOIN   Reproducciones R ON R.ContenidoID = C.ContenidoID
+    GROUP BY C.ContenidoID, C.Titulo, C.Tipo, C.Categoria
+    HAVING SUM(R.MinutosVistos) >
+    (
+        -- Subconsulta: promedio de minutos acumulados por contenido
+        -- considerando unicamente los contenidos que tienen reproducciones
+        SELECT AVG(CAST(T.TotalMinutos AS DECIMAL(18,2)))
+        FROM (
+                SELECT ContenidoID, SUM(MinutosVistos) AS TotalMinutos
+                FROM Reproducciones
+                GROUP BY ContenidoID
+             ) AS T
+    );
+GO
+
+-- 8.1) Consulta de la vista ordenada por total de minutos vistos (desc)
+SELECT  ContenidoID,
+        Titulo,
+        Tipo,
+        Categoria,
+        CantidadReproducciones,
+        TotalMinutosVistos
+FROM vw_ContenidosSuperioresPromedio
+ORDER BY TotalMinutosVistos DESC;
+GO
+
+===============================================================================
+PREGUNTA 9 (2 puntos)
+Indice no agrupado compuesto IX_Contenidos_Tipo_Categoria_Anio sobre la tabla
+Contenidos (Tipo, Categoria, Anio).
+===============================================================================
+
+-- 9.1) Verificacion previa de existencia mediante sys.indexes
+IF EXISTS (SELECT 1
+           FROM sys.indexes
+           WHERE name = 'IX_Contenidos_Tipo_Categoria_Anio'
+             AND object_id = OBJECT_ID('Contenidos'))
+BEGIN
+    PRINT 'El indice IX_Contenidos_Tipo_Categoria_Anio ya existe. Se elimina.';
+    DROP INDEX IX_Contenidos_Tipo_Categoria_Anio ON Contenidos;
+END
+ELSE
+    PRINT 'El indice IX_Contenidos_Tipo_Categoria_Anio no existe. Se creara.';
+GO
+
+-- 9.2) Creacion del indice no agrupado compuesto
+CREATE NONCLUSTERED INDEX IX_Contenidos_Tipo_Categoria_Anio
+ON Contenidos (Tipo, Categoria, Anio);
+GO
+
+-- 9.3) Consulta que aprovecha el indice: peliculas de Accion desde el 2022
+SELECT  ContenidoID,
+        Titulo,
+        Tipo,
+        Categoria,
+        Anio
+FROM Contenidos
+WHERE Tipo      = 'Película'
+  AND Categoria = 'Acción'
+  AND Anio     >= 2022
+ORDER BY Anio DESC, Titulo;
+GO
+
+-- 9.4) Indices de la tabla Contenidos
+EXEC sp_helpindex 'Contenidos';
+GO
+
+===============================================================================
+PREGUNTA 10 (2 puntos)
+Indice unico IX_Planes_NombrePlan_Unico sobre Planes(NombrePlan) y comprobacion
+de que impide nombres de plan duplicados.
+===============================================================================
+
+-- 10.1) Verificacion previa de existencia mediante sys.indexes
+IF EXISTS (SELECT 1
+           FROM sys.indexes
+           WHERE name = 'IX_Planes_NombrePlan_Unico'
+             AND object_id = OBJECT_ID('Planes'))
+BEGIN
+    PRINT 'El indice IX_Planes_NombrePlan_Unico ya existe. Se elimina.';
+    DROP INDEX IX_Planes_NombrePlan_Unico ON Planes;
+END
+ELSE
+    PRINT 'El indice IX_Planes_NombrePlan_Unico no existe. Se creara.';
+GO
+
+-- 10.2) Creacion del indice unico
+CREATE UNIQUE NONCLUSTERED INDEX IX_Planes_NombrePlan_Unico
+ON Planes (NombrePlan);
+GO
+
+-- 10.3) Indices existentes en la tabla Planes
+EXEC sp_helpindex 'Planes';
+GO
+
+-- 10.4) Intento de insertar un plan duplicado llamado Premium.
+--       Se usa TRY...CATCH para capturar el error del indice unico.
+BEGIN TRY
+    INSERT INTO Planes (NombrePlan, Precio, Pantallas)
+    VALUES ('Premium', 69.90, 5);
+
+    PRINT 'La insercion se realizo (no habria restriccion de unicidad).';
+END TRY
+BEGIN CATCH
+    PRINT '--------------------------------------------------------------';
+    PRINT 'Numero de error  : ' + CAST(ERROR_NUMBER() AS VARCHAR(10));
+    PRINT 'Mensaje de error : ' + ERROR_MESSAGE();
+    PRINT 'El indice unico IX_Planes_NombrePlan_Unico impidio registrar';
+    PRINT 'un NombrePlan duplicado.';
+    PRINT '--------------------------------------------------------------';
+END CATCH
+GO
+
+-- 10.5) Comprobacion final: el registro duplicado no se inserto
+SELECT  PlanID,
+        NombrePlan,
+        CAST(Precio AS DECIMAL(10,2)) AS Precio,
+        Pantallas
+FROM Planes
+ORDER BY PlanID;
+GO
+
+===============================================================================
+FIN DEL TRABAJO
+===============================================================================
