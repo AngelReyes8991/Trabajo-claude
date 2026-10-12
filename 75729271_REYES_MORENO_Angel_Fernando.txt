@@ -2,36 +2,21 @@
 PROCESO DE APRENDIZAJE II
 PROGRAMACION AVANZADA DE BASE DE DATOS - 2026-20
 ===============================================================================
-APELLIDOS Y NOMBRES DEL ESTUDIANTE : ____________________________________
+APELLIDOS Y NOMBRES DEL ESTUDIANTE : REYES MORENO, Angel Fernando
+DNI                                : 75729271
 CORREO ELECTRONICO                 : ____________________________________
 BASE DE DATOS                      : CLASE_S05_STREAMING
 MOTOR                              : Microsoft SQL Server (T-SQL)
 ===============================================================================
 
 -------------------------------------------------------------------------------
-NOTA SOBRE EL ESQUEMA UTILIZADO
+ESTRUCTURA DE LA BASE DE DATOS UTILIZADA
 -------------------------------------------------------------------------------
-Las sentencias se escribieron sobre la estructura de la base de datos
-CLASE_S05_STREAMING trabajada en clase:
-
   Usuarios       (UsuarioID, Nombre, Email, Pais, FechaRegistro, Estado)
   Planes         (PlanID, NombrePlan, Precio, Pantallas)
   Suscripciones  (SuscripcionID, UsuarioID, PlanID, FechaInicio, Estado)
   Contenidos     (ContenidoID, Titulo, Tipo, Categoria, Anio)
   Reproducciones (ReproduccionID, UsuarioID, ContenidoID, MinutosVistos, Fecha)
-
-Los valores de texto empleados en los filtros son:
-
-  Usuarios.Estado      = 'Activo'
-  Suscripciones.Estado = 'Activa'
-  Usuarios.Pais        = 'Perú'
-  Contenidos.Tipo      = 'Serie' / 'Película'
-  Contenidos.Categoria = 'Acción'
-
-Como la configuracion por omision de SQL Server distingue acentos, los
-literales se escribieron tal como aparecen en el enunciado. Si en la base de
-datos de clase se almacenan de otra forma, basta con ajustarlos en el WHERE
-correspondiente.
 
 USE CLASE_S05_STREAMING;
 GO
@@ -353,6 +338,15 @@ Contenidos (Tipo, Categoria, Anio).
 ===============================================================================
 
 -- 9.1) Verificacion previa de existencia mediante sys.indexes
+SELECT  name        AS NombreIndice,
+        type_desc   AS TipoIndice,
+        is_unique   AS EsUnico
+FROM sys.indexes
+WHERE object_id = OBJECT_ID('Contenidos')
+  AND name = 'IX_Contenidos_Tipo_Categoria_Anio';
+GO
+
+-- Si el indice ya existiera se elimina, para poder crearlo nuevamente
 IF EXISTS (SELECT 1
            FROM sys.indexes
            WHERE name = 'IX_Contenidos_Tipo_Categoria_Anio'
@@ -394,6 +388,15 @@ de que impide nombres de plan duplicados.
 ===============================================================================
 
 -- 10.1) Verificacion previa de existencia mediante sys.indexes
+SELECT  name        AS NombreIndice,
+        type_desc   AS TipoIndice,
+        is_unique   AS EsUnico
+FROM sys.indexes
+WHERE object_id = OBJECT_ID('Planes')
+  AND name = 'IX_Planes_NombrePlan_Unico';
+GO
+
+-- Si el indice ya existiera se elimina, para poder crearlo nuevamente
 IF EXISTS (SELECT 1
            FROM sys.indexes
            WHERE name = 'IX_Planes_NombrePlan_Unico'
