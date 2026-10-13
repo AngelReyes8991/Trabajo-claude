@@ -18,8 +18,32 @@ ESTRUCTURA DE LA BASE DE DATOS UTILIZADA
   Contenidos     (ContenidoID, Titulo, Tipo, Categoria, Anio)
   Reproducciones (ReproduccionID, UsuarioID, ContenidoID, MinutosVistos, Fecha)
 
+-------------------------------------------------------------------------------
+VERIFICACION PREVIA DEL ENTORNO
+-------------------------------------------------------------------------------
 USE CLASE_S05_STREAMING;
 GO
+
+-- Nombres y tipos reales de las columnas de las cinco tablas utilizadas
+SELECT  t.name         AS Tabla,
+        c.column_id    AS Nro,
+        c.name         AS Columna,
+        ty.name        AS TipoDato
+FROM         sys.tables  t
+INNER JOIN   sys.columns c  ON c.object_id     = t.object_id
+INNER JOIN   sys.types   ty ON ty.user_type_id = c.user_type_id
+WHERE t.name IN ('Usuarios','Planes','Suscripciones','Contenidos','Reproducciones')
+ORDER BY t.name, c.column_id;
+GO
+
+-- Valores de texto realmente almacenados, usados en los filtros
+SELECT DISTINCT Pais      AS PaisesRegistrados      FROM Usuarios;
+SELECT DISTINCT Estado    AS EstadoUsuarios         FROM Usuarios;
+SELECT DISTINCT Estado    AS EstadoSuscripciones    FROM Suscripciones;
+SELECT DISTINCT Tipo      AS TiposDeContenido       FROM Contenidos;
+SELECT DISTINCT Categoria AS CategoriasDeContenido  FROM Contenidos;
+GO
+
 
 ===============================================================================
 PREGUNTA 1 (2 puntos)
@@ -92,19 +116,21 @@ de tipo Serie y con menos de 50 minutos vistos, usando DELETE con subconsultas.
 ===============================================================================
 
 -- 3.1) Registros que seran afectados (ANTES de eliminar)
+--      Se usa COLLATE Latin1_General_CI_AI para que la comparacion no
+--      distinga acentos y 'Peru' coincida igual que 'Perú'.
 SELECT  R.ReproduccionID,
         R.UsuarioID,
         R.ContenidoID,
         R.MinutosVistos
 FROM Reproducciones R
-WHERE R.UsuarioID   IN (SELECT UsuarioID   FROM Usuarios   WHERE Pais = 'Perú')
+WHERE R.UsuarioID   IN (SELECT UsuarioID   FROM Usuarios   WHERE Pais COLLATE Latin1_General_CI_AI = 'Perú')
   AND R.ContenidoID IN (SELECT ContenidoID FROM Contenidos WHERE Tipo = 'Serie')
   AND R.MinutosVistos < 50;
 GO
 
 -- 3.2) Eliminacion con DELETE y subconsultas
 DELETE FROM Reproducciones
-WHERE UsuarioID   IN (SELECT UsuarioID   FROM Usuarios   WHERE Pais = 'Perú')
+WHERE UsuarioID   IN (SELECT UsuarioID   FROM Usuarios   WHERE Pais COLLATE Latin1_General_CI_AI = 'Perú')
   AND ContenidoID IN (SELECT ContenidoID FROM Contenidos WHERE Tipo = 'Serie')
   AND MinutosVistos < 50;
 
@@ -117,7 +143,7 @@ SELECT  R.ReproduccionID,
         R.ContenidoID,
         R.MinutosVistos
 FROM Reproducciones R
-WHERE R.UsuarioID   IN (SELECT UsuarioID   FROM Usuarios   WHERE Pais = 'Perú')
+WHERE R.UsuarioID   IN (SELECT UsuarioID   FROM Usuarios   WHERE Pais COLLATE Latin1_General_CI_AI = 'Perú')
   AND R.ContenidoID IN (SELECT ContenidoID FROM Contenidos WHERE Tipo = 'Serie')
   AND R.MinutosVistos < 50;
 GO
@@ -144,7 +170,7 @@ SELECT  U.UsuarioID,
 INTO ReporteConsumoUsuarios
 FROM         Usuarios       U
 INNER JOIN   Reproducciones R ON R.UsuarioID = U.UsuarioID
-WHERE U.Estado = 'Activo'
+WHERE U.Estado LIKE 'Activ%'
 GROUP BY U.UsuarioID, U.Nombre, U.Pais;
 GO
 
@@ -240,7 +266,7 @@ AS
     FROM         Usuarios      U
     INNER JOIN   Suscripciones S ON S.UsuarioID = U.UsuarioID
     INNER JOIN   Planes        P ON P.PlanID    = S.PlanID
-    WHERE S.Estado     = 'Activa'
+    WHERE S.Estado     LIKE 'Activ%'
       AND P.NombrePlan = 'Premium';
 GO
 
@@ -365,14 +391,17 @@ ON Contenidos (Tipo, Categoria, Anio);
 GO
 
 -- 9.3) Consulta que aprovecha el indice: peliculas de Accion desde el 2022
+--      Se filtra por prefijo (LIKE 'Pel%' / 'Acc%') porque el comodin va
+--      despues de la vocal acentuada: coincide con o sin tilde y, al ser
+--      un prefijo, permite que el motor siga usando el indice.
 SELECT  ContenidoID,
         Titulo,
         Tipo,
         Categoria,
         Anio
 FROM Contenidos
-WHERE Tipo      = 'Película'
-  AND Categoria = 'Acción'
+WHERE Tipo      LIKE 'Pel%'
+  AND Categoria LIKE 'Acc%'
   AND Anio     >= 2022
 ORDER BY Anio DESC, Titulo;
 GO
