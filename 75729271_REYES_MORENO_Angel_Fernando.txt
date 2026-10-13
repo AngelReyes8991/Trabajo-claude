@@ -4,7 +4,7 @@ PROGRAMACION AVANZADA DE BASE DE DATOS - 2026-20
 ===============================================================================
 APELLIDOS Y NOMBRES DEL ESTUDIANTE : REYES MORENO, Angel Fernando
 DNI                                : 75729271
-CORREO ELECTRONICO                 : ____________________________________
+CORREO ELECTRONICO                 : 75729271@mail.isi.pe
 BASE DE DATOS                      : CLASE_S05_STREAMING
 MOTOR                              : Microsoft SQL Server (T-SQL)
 ===============================================================================
